@@ -1,0 +1,328 @@
+Metadata-Version: 2.4
+Name: llm-io-intelligence
+Version: 0.1.0
+Summary: Plugin for LLM adding support for io intelligence API models
+Author: LLM IO Intelligence Plugin
+License: Apache-2.0
+Project-URL: Homepage, https://github.com/io-intelligence/llm-io-intelligence
+Project-URL: Documentation, https://docs.io.net/reference/get-started-with-io-intelligence-api
+Project-URL: Issues, https://github.com/io-intelligence/llm-io-intelligence/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: llm>=0.9
+Requires-Dist: httpx>=0.24.0
+Requires-Dist: pydantic>=2.0.0
+
+# LLM IO Intelligence Plugin
+
+An LLM plugin for accessing models from the [IO Intelligence API](https://docs.io.net/reference/get-started-with-io-intelligence-api), which provides access to a wide variety of open-source large language models deployed on IO Net hardware.
+
+## Features
+
+- Support for 31+ language models including Llama, DeepSeek, Qwen, Mistral, and more
+- Support for 2 embedding models
+- Streaming and non-streaming responses
+- Full OpenAI API compatibility
+- Comprehensive logging and error handling
+- Extensive options for fine-tuning model behavior
+
+## Installation
+
+Install this plugin using:
+
+```bash
+llm install llm-io-intelligence
+```
+
+Or install from source for development:
+
+```bash
+git clone <repository-url>
+cd llm-io-intelligence
+llm install -e .
+```
+
+## Configuration
+
+You need an API key from [IO Intelligence](https://ai.io.net/ai-api-keys). Set it as an environment variable:
+
+```bash
+export IOINTELLIGENCE_API_KEY="your-api-key-here"
+```
+
+## Troubleshooting
+
+### Plugin Not Found Issue
+
+If you encounter an error like "Unknown model: llama-3.3-70b" when using the `llm` command, this is a known issue with LLM's plugin discovery mechanism. 
+
+**Solution**: Use `python -m llm` instead of `llm`:
+
+```bash
+# Instead of: llm -m llama-3.3-70b "Hello"
+# Use this:
+python -m llm -m llama-3.3-70b "Hello"
+```
+
+This affects all commands, so replace `llm` with `python -m llm`:
+
+```bash
+# List models
+python -m llm models list
+
+# Chat with models
+python -m llm -m deepseek-r1 "Explain quantum computing"
+
+# Embeddings
+python -m llm embed -m bge-multilingual-gemma2 "Text to embed"
+```
+
+**Alternative Solution**: Make sure you installed the plugin correctly using:
+
+```bash
+llm install -e .  # Not pip install -e .
+```
+
+## Available Models
+
+### Chat Models
+
+The plugin provides access to the following models with their short names:
+
+- `llama-4-maverick-17b` - meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 (430K context)
+- `deepseek-r1-distill-llama-70b` - deepseek-ai/DeepSeek-R1-Distill-Llama-70B (128K context)
+- `qwen3-235b` - Qwen/Qwen3-235B-A22B-FP8 (8K context)
+- `deepseek-r1` - deepseek-ai/DeepSeek-R1 (128K context)
+- `qwq-32b` - Qwen/QwQ-32B (32K context)
+- `deepseek-r1-distill-qwen-32b` - deepseek-ai/DeepSeek-R1-Distill-Qwen-32B (128K context)
+- `llama-3.3-70b` - meta-llama/Llama-3.3-70B-Instruct (128K context)
+- `dbrx-instruct` - databricks/dbrx-instruct (32K context)
+- `llama-3.1-nemotron-70b` - neuralmagic/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic (128K context)
+- `phi-4` - microsoft/phi-4 (16K context)
+- `acemath-7b` - nvidia/AceMath-7B-Instruct (4K context)
+- `gemma-3-27b` - google/gemma-3-27b-it (8K context)
+- `mistral-large-2411` - mistralai/Mistral-Large-Instruct-2411 (128K context)
+- `watt-tool-70b` - watt-ai/watt-tool-70B (128K context)
+- `dobby-mini-8b` - SentientAGI/Dobby-Mini-Unhinged-Llama-3.1-8B (128K context)
+- `falcon3-10b` - tiiuae/Falcon3-10B-Instruct (32K context)
+- `bespoke-stratos-32b` - bespokelabs/Bespoke-Stratos-32B (32K context)
+- `confucius-o1-14b` - netease-youdao/Confucius-o1-14B (32K context)
+- `aya-expanse-32b` - CohereForAI/aya-expanse-32b (8K context)
+- `qwen2.5-coder-32b` - Qwen/Qwen2.5-Coder-32B-Instruct (32K context)
+- `sky-t1-32b` - NovaSky-AI/Sky-T1-32B-Preview (32K context)
+- `glm-4-9b` - THUDM/glm-4-9b-chat (128K context)
+- `ministral-8b` - mistralai/Ministral-8B-Instruct-2410 (32K context)
+- `readerlm-v2` - jinaai/ReaderLM-v2 (512K context)
+- `minicpm3-4b` - openbmb/MiniCPM3-4B (32K context)
+- `qwen2.5-1.5b` - Qwen/Qwen2.5-1.5B-Instruct (32K context)
+- `granite-3.1-8b` - ibm-granite/granite-3.1-8b-instruct (128K context)
+- `0x-lite` - ozone-ai/0x-lite (32K context)
+- `phi-3.5-mini` - microsoft/Phi-3.5-mini-instruct (128K context)
+- `llama-3.2-90b-vision` - meta-llama/Llama-3.2-90B-Vision-Instruct (16K context)
+- `qwen2-vl-7b` - Qwen/Qwen2-VL-7B-Instruct
+
+### Embedding Models
+
+- `bge-multilingual-gemma2` - BAAI/bge-multilingual-gemma2 (4096 tokens)
+- `mxbai-embed-large-v1` - mixedbread-ai/mxbai-embed-large-v1 (512 tokens)
+
+## Usage
+
+### Basic Usage
+
+```bash
+# List available models
+llm models list
+
+# Use a specific model
+llm -m llama-3.3-70b "Hello, how are you?"
+
+# Use with system prompt
+llm -m deepseek-r1 -s "You are a helpful coding assistant" "Write a Python function to sort a list"
+```
+
+### Streaming
+
+```bash
+# Stream responses (default)
+llm -m qwen3-235b "Tell me a story"
+
+# Disable streaming
+llm -m llama-3.3-70b "Hello" --no-stream
+```
+
+### Options
+
+The plugin supports various options to control model behavior:
+
+```bash
+# Temperature (0.0-2.0, default 0.7)
+llm -m llama-3.3-70b "Be creative" -o temperature 1.2
+
+# Max tokens
+llm -m deepseek-r1 "Explain AI" -o max_tokens 500
+
+# Top-p nucleus sampling (0.0-1.0)
+llm -m qwen3-235b "Write code" -o top_p 0.9
+
+# Frequency penalty (-2.0 to 2.0)
+llm -m mistral-large-2411 "Tell me about cats" -o frequency_penalty 0.5
+
+# Presence penalty (-2.0 to 2.0)
+llm -m llama-3.3-70b "Explain quantum physics" -o presence_penalty 0.3
+
+# Include reasoning content (for models that support it)
+llm -m deepseek-r1 "Solve this problem step by step" -o reasoning_content true
+```
+
+### Embeddings
+
+```bash
+# Generate embeddings
+llm embed -m bge-multilingual-gemma2 "Hello world"
+
+# Embed multiple texts
+echo -e "Hello\nWorld\nTest" | llm embed -m mxbai-embed-large-v1
+```
+
+### Python API
+
+```python
+import llm
+
+# Initialize model
+model = llm.get_model("llama-3.3-70b")
+
+# Basic completion
+response = model.prompt("Hello, how are you?")
+print(response.text())
+
+# With options
+response = model.prompt(
+    "Write a story",
+    temperature=1.0,
+    max_tokens=500
+)
+
+# Streaming
+for chunk in model.prompt("Tell me a story", stream=True):
+    print(chunk, end="")
+
+# System prompt
+response = model.prompt(
+    "Write Python code",
+    system="You are a helpful coding assistant"
+)
+
+# Embeddings
+embed_model = llm.get_embed_model("bge-multilingual-gemma2")
+embeddings = embed_model.embed(["Hello", "World"])
+```
+
+## Development
+
+### Setting up development environment
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd llm-io-intelligence
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the plugin in development mode
+llm install -e .
+
+# Set API key
+export IOINTELLIGENCE_API_KEY="your-api-key"
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest -vv --tb=short --maxfail=1
+
+# Run specific test class
+pytest -vv test_io_intelligence.py::TestIOIntelligenceModel
+
+# Run with coverage
+pytest --cov=llm_io_intelligence
+```
+
+### Testing the Plugin
+
+```bash
+# Install in development mode
+llm install -e .
+
+# Test basic functionality
+llm -m llama-3.3-70b "Hello"
+
+# Test streaming
+llm -m deepseek-r1 "Count to 10"
+
+# Test embeddings
+llm embed -m bge-multilingual-gemma2 "Test embedding"
+
+# Check plugin registration
+llm plugins
+```
+
+## Error Handling
+
+The plugin includes comprehensive error handling:
+
+- **API Key Missing**: Clear error message when `IOINTELLIGENCE_API_KEY` is not set
+- **HTTP Errors**: Proper error reporting for API failures with status codes
+- **Network Issues**: Timeout handling and connection error recovery
+- **Malformed Responses**: Graceful handling of unexpected API responses
+- **Rate Limiting**: Appropriate error messages for rate limit exceeded scenarios
+
+## Logging
+
+The plugin includes extensive logging for debugging:
+
+```python
+import logging
+logging.basicConfig(level=logging.INFO)
+
+# Now all plugin operations will be logged
+llm -m llama-3.3-70b "Hello"
+```
+
+## Daily Quotas
+
+IO Intelligence provides free daily limits per account:
+
+- **Chat Models**: 1,000,000 tokens daily chat quota, 500,000 tokens daily API quota
+- **Embedding Models**: 50,000,000 tokens daily quota
+- **Vision Models**: 500,000 tokens daily API quota only
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
+
+## License
+
+Apache-2.0
+
+## Links
+
+- [IO Intelligence API Documentation](https://docs.io.net/reference/get-started-with-io-intelligence-api)
+- [LLM CLI Documentation](https://llm.datasette.io/)
+- [Plugin Development Tutorial](https://llm.datasette.io/en/stable/plugins/tutorial-model-plugin.html) 

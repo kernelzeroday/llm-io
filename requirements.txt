@@ -1,0 +1,4 @@
+llm>=0.9
+httpx>=0.24.0
+pydantic>=2.0.0
+pytest>=7.0.0 
