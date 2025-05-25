@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import base64
 from typing import Iterator, List, Optional, Dict, Any
 import httpx
 import llm
@@ -55,6 +56,7 @@ def register_models(register):
 
 class IOIntelligenceModel(llm.Model):
     can_stream = True
+    attachment_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     
     def __init__(self, model_id: str, full_model_name: str, context_length: Optional[int] = None):
         self.model_id = model_id
@@ -141,7 +143,53 @@ class IOIntelligenceModel(llm.Model):
             if prompt.system:
                 messages.insert(0, {"role": "system", "content": prompt.system})
             
-            messages.append({"role": "user", "content": prompt.prompt})
+            # Handle attachments for vision models
+            user_content = []
+            
+            # Add text content
+            if prompt.prompt:
+                user_content.append({"type": "text", "text": prompt.prompt})
+            
+            # Add image attachments if present
+            if hasattr(prompt, 'attachments') and prompt.attachments:
+                logger.debug(f"Processing {len(prompt.attachments)} attachments")
+                for attachment in prompt.attachments:
+                    if attachment.type.startswith('image/'):
+                        if attachment.url:
+                            # Use URL directly
+                            user_content.append({
+                                "type": "image_url",
+                                "image_url": {"url": attachment.url}
+                            })
+                            logger.debug(f"Added image URL: {attachment.url}")
+                        elif attachment.content:
+                            # Convert binary content to base64
+                            base64_data = base64.b64encode(attachment.content).decode('utf-8')
+                            data_url = f"data:{attachment.type};base64,{base64_data}"
+                            user_content.append({
+                                "type": "image_url", 
+                                "image_url": {"url": data_url}
+                            })
+                            logger.debug(f"Added base64 image: {attachment.type}")
+                        elif attachment.path:
+                            # Read file and convert to base64
+                            with open(attachment.path, 'rb') as f:
+                                file_content = f.read()
+                            base64_data = base64.b64encode(file_content).decode('utf-8')
+                            data_url = f"data:{attachment.type};base64,{base64_data}"
+                            user_content.append({
+                                "type": "image_url",
+                                "image_url": {"url": data_url}
+                            })
+                            logger.debug(f"Added file image: {attachment.path}")
+                    else:
+                        logger.warning(f"Unsupported attachment type: {attachment.type}")
+            
+            # Use content array if we have attachments, otherwise use simple string
+            if len(user_content) > 1 or (len(user_content) == 1 and user_content[0]["type"] != "text"):
+                messages.append({"role": "user", "content": user_content})
+            else:
+                messages.append({"role": "user", "content": prompt.prompt})
             
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -216,6 +264,8 @@ class IOIntelligenceModel(llm.Model):
                     if "choices" in result and result["choices"]:
                         content = result["choices"][0]["message"]["content"]
                         yield content
+                    else:
+                        raise llm.ModelError("No response content received")
                         
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")

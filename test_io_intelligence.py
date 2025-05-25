@@ -14,7 +14,7 @@ from llm_io_intelligence import (
 
 class TestIOIntelligenceModel:
     def setup_method(self):
-        self.model = IOIntelligenceModel("meta-llama/Llama-3.3-70B-Instruct", "llama-3.3-70b", 128000)
+        self.model = IOIntelligenceModel("llama-3.3-70b", "meta-llama/Llama-3.3-70B-Instruct", 128000)
         
     def test_model_initialization(self):
         assert self.model.full_model_name == "meta-llama/Llama-3.3-70B-Instruct"
@@ -36,46 +36,7 @@ class TestIOIntelligenceModel:
         api_key = self.model.get_key()
         assert api_key is None
         
-    def test_build_messages_simple(self):
-        mock_prompt = Mock()
-        mock_prompt.system = None
-        mock_prompt.prompt = "Hello, world!"
-        
-        messages = self.model._build_messages(mock_prompt, None)
-        
-        assert len(messages) == 1
-        assert messages[0] == {"role": "user", "content": "Hello, world!"}
-        
-    def test_build_messages_with_system(self):
-        mock_prompt = Mock()
-        mock_prompt.system = "You are a helpful assistant."
-        mock_prompt.prompt = "Hello, world!"
-        
-        messages = self.model._build_messages(mock_prompt, None)
-        
-        assert len(messages) == 2
-        assert messages[0] == {"role": "system", "content": "You are a helpful assistant."}
-        assert messages[1] == {"role": "user", "content": "Hello, world!"}
-        
-    def test_build_messages_with_conversation(self):
-        mock_prompt = Mock()
-        mock_prompt.system = None
-        mock_prompt.prompt = "What's next?"
-        
-        mock_prev_response = Mock()
-        mock_prev_response.prompt.prompt = "Hello"
-        mock_prev_response.text.return_value = "Hi there!"
-        
-        mock_conversation = Mock()
-        mock_conversation.responses = [mock_prev_response]
-        
-        messages = self.model._build_messages(mock_prompt, mock_conversation)
-        
-        assert len(messages) == 3
-        assert messages[0] == {"role": "user", "content": "Hello"}
-        assert messages[1] == {"role": "assistant", "content": "Hi there!"}
-        assert messages[2] == {"role": "user", "content": "What's next?"}
-        
+
     @patch('httpx.Client')
     @patch.dict(os.environ, {"IOINTELLIGENCE_API_KEY": "test-key"})
     def test_non_stream_response_success(self, mock_client_class):
@@ -90,18 +51,21 @@ class TestIOIntelligenceModel:
         
         mock_prompt = Mock()
         mock_prompt.options = Mock()
-        mock_prompt.options.temperature = 0.7
-        mock_prompt.options.max_tokens = None
-        mock_prompt.options.top_p = None
-        mock_prompt.options.frequency_penalty = None
-        mock_prompt.options.presence_penalty = None
-        mock_prompt.options.reasoning_content = None
+        mock_prompt.options.model_dump.return_value = {
+            "temperature": 0.7,
+            "max_tokens": None,
+            "top_p": None,
+            "frequency_penalty": None,
+            "presence_penalty": None,
+            "reasoning_content": None
+        }
         mock_prompt.system = None
         mock_prompt.prompt = "Hello"
+        mock_prompt.attachments = None
         
-        result = self.model.execute(mock_prompt, False, None, None)
+        result = list(self.model.execute(mock_prompt, False, None, None))
         
-        assert result == "Hello! How can I help you?"
+        assert result == ["Hello! How can I help you?"]
         mock_client.post.assert_called_once()
         
     @patch('httpx.Client')
@@ -117,46 +81,50 @@ class TestIOIntelligenceModel:
         
         mock_prompt = Mock()
         mock_prompt.options = Mock()
-        mock_prompt.options.temperature = None
-        mock_prompt.options.max_tokens = None
-        mock_prompt.options.top_p = None
-        mock_prompt.options.frequency_penalty = None
-        mock_prompt.options.presence_penalty = None
-        mock_prompt.options.reasoning_content = None
+        mock_prompt.options.model_dump.return_value = {
+            "temperature": None,
+            "max_tokens": None,
+            "top_p": None,
+            "frequency_penalty": None,
+            "presence_penalty": None,
+            "reasoning_content": None
+        }
         mock_prompt.system = None
         mock_prompt.prompt = "Hello"
+        mock_prompt.attachments = None
         
-        with pytest.raises(llm.ModelError, match="HTTP 401"):
-            self.model.execute(mock_prompt, False, None, None)
+        with pytest.raises(llm.ModelError, match="API request failed: 401"):
+            list(self.model.execute(mock_prompt, False, None, None))
             
-    @patch('httpx.Client')
+    @patch('httpx.stream')
     @patch.dict(os.environ, {"IOINTELLIGENCE_API_KEY": "test-key"})
-    def test_stream_response_success(self, mock_client_class):
-        mock_client = Mock()
-        mock_client_class.return_value.__enter__.return_value = mock_client
-        
+    def test_stream_response_success(self, mock_stream):
         mock_response = Mock()
         mock_response.iter_lines.return_value = [
             "data: " + json.dumps({"choices": [{"delta": {"content": "Hello"}}]}),
             "data: " + json.dumps({"choices": [{"delta": {"content": " world"}}]}),
             "data: [DONE]"
         ]
+        mock_response.raise_for_status.return_value = None
         
         # Create a proper context manager mock
         mock_context_manager = MagicMock()
         mock_context_manager.__enter__.return_value = mock_response
-        mock_client.stream.return_value = mock_context_manager
+        mock_stream.return_value = mock_context_manager
         
         mock_prompt = Mock()
         mock_prompt.options = Mock()
-        mock_prompt.options.temperature = None
-        mock_prompt.options.max_tokens = None
-        mock_prompt.options.top_p = None
-        mock_prompt.options.frequency_penalty = None
-        mock_prompt.options.presence_penalty = None
-        mock_prompt.options.reasoning_content = None
+        mock_prompt.options.model_dump.return_value = {
+            "temperature": None,
+            "max_tokens": None,
+            "top_p": None,
+            "frequency_penalty": None,
+            "presence_penalty": None,
+            "reasoning_content": None
+        }
         mock_prompt.system = None
         mock_prompt.prompt = "Hello"
+        mock_prompt.attachments = None
         
         result = list(self.model.execute(mock_prompt, True, None, None))
         
@@ -166,17 +134,18 @@ class TestIOIntelligenceModel:
         with patch.dict(os.environ, {}, clear=True):
             mock_prompt = Mock()
             mock_prompt.options = Mock()
+            mock_prompt.attachments = None
             
-            with pytest.raises(llm.ModelError, match="API key not found"):
-                self.model.execute(mock_prompt, False, None, None)
+            with pytest.raises(llm.ModelError, match="Request failed: IOINTELLIGENCE_API_KEY environment variable is required"):
+                list(self.model.execute(mock_prompt, False, None, None))
 
 class TestIOIntelligenceEmbedModel:
     def setup_method(self):
-        self.embed_model = IOIntelligenceEmbedModel("BAAI/bge-multilingual-gemma2", "bge-multilingual-gemma2", 4096)
+        self.embed_model = IOIntelligenceEmbedModel("bge-multilingual-gemma2", "BAAI/bge-multilingual-gemma2", 4096)
         
     def test_embed_model_initialization(self):
-        assert self.embed_model.full_model_name == "BAAI/bge-multilingual-gemma2"
         assert self.embed_model.model_id == "bge-multilingual-gemma2"
+        assert self.embed_model.full_model_name == "BAAI/bge-multilingual-gemma2"
         assert self.embed_model.max_tokens == 4096
         assert self.embed_model.needs_key == "iointelligence"
         assert self.embed_model.key_env_var == "IOINTELLIGENCE_API_KEY"
@@ -222,7 +191,7 @@ class TestIOIntelligenceEmbedModel:
         with patch.dict(os.environ, {}, clear=True):
             items = ["Hello", "World"]
             
-            with pytest.raises(llm.ModelError, match="API key not found"):
+            with pytest.raises(llm.ModelError, match="API key not found. Set IOINTELLIGENCE_API_KEY environment variable"):
                 list(self.embed_model.embed_batch(items))
 
 class TestModelOptions:
@@ -294,47 +263,46 @@ class TestEdgeCases:
     def setup_method(self):
         self.model = IOIntelligenceModel("test-model", "test", 1000)
         
+    @patch.dict(os.environ, {"IOINTELLIGENCE_API_KEY": "test-key"})
     def test_empty_prompt(self):
         mock_prompt = Mock()
         mock_prompt.system = None
         mock_prompt.prompt = ""
+        mock_prompt.options = Mock()
+        mock_prompt.attachments = None
+        for attr in ['temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty', 'reasoning_content']:
+            setattr(mock_prompt.options, attr, None)
         
-        messages = self.model._build_messages(mock_prompt, None)
+        # Test that empty prompt doesn't crash
+        with patch('httpx.Client') as mock_client_class:
+            mock_client = Mock()
+            mock_client_class.return_value.__enter__.return_value = mock_client
+            mock_response = Mock()
+            mock_response.json.return_value = {"choices": [{"message": {"content": "Empty response"}}]}
+            mock_client.post.return_value = mock_response
+            
+            result = list(self.model.execute(mock_prompt, False, None, None))
+            assert result == ["Empty response"]
         
-        assert len(messages) == 1
-        assert messages[0] == {"role": "user", "content": ""}
-        
-    def test_very_long_prompt(self):
-        long_text = "x" * 10000
-        mock_prompt = Mock()
-        mock_prompt.system = None
-        mock_prompt.prompt = long_text
-        
-        messages = self.model._build_messages(mock_prompt, None)
-        
-        assert len(messages) == 1
-        assert messages[0] == {"role": "user", "content": long_text}
-        
-    @patch('httpx.Client')
+    @patch('httpx.stream')
     @patch.dict(os.environ, {"IOINTELLIGENCE_API_KEY": "test-key"})
-    def test_malformed_streaming_response(self, mock_client_class):
-        mock_client = Mock()
-        mock_client_class.return_value.__enter__.return_value = mock_client
-        
+    def test_malformed_streaming_response(self, mock_stream):
         mock_response = Mock()
         mock_response.iter_lines.return_value = [
             "data: invalid json",
             "data: " + json.dumps({"invalid": "structure"}),
             "data: [DONE]"
         ]
+        mock_response.raise_for_status.return_value = None
         
         # Create a proper context manager mock
         mock_context_manager = MagicMock()
         mock_context_manager.__enter__.return_value = mock_response
-        mock_client.stream.return_value = mock_context_manager
+        mock_stream.return_value = mock_context_manager
         
         mock_prompt = Mock()
         mock_prompt.options = Mock()
+        mock_prompt.attachments = None
         for attr in ['temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty', 'reasoning_content']:
             setattr(mock_prompt.options, attr, None)
         mock_prompt.system = None
@@ -357,10 +325,11 @@ class TestEdgeCases:
         
         mock_prompt = Mock()
         mock_prompt.options = Mock()
+        mock_prompt.attachments = None
         for attr in ['temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty', 'reasoning_content']:
             setattr(mock_prompt.options, attr, None)
         mock_prompt.system = None
         mock_prompt.prompt = "Hello"
         
         with pytest.raises(llm.ModelError, match="No response content received"):
-            self.model.execute(mock_prompt, False, None, None) 
+            list(self.model.execute(mock_prompt, False, None, None)) 

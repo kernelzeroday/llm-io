@@ -4,12 +4,14 @@ An LLM plugin for accessing models from the [IO Intelligence API](https://docs.i
 
 ## Features
 
-- Support for 31+ language models including Llama, DeepSeek, Qwen, Mistral, and more
-- Support for 2 embedding models
-- Streaming and non-streaming responses
-- Full OpenAI API compatibility
-- Comprehensive logging and error handling
-- Extensive options for fine-tuning model behavior
+- **31+ Language Models**: Including Llama, DeepSeek, Qwen, Mistral, and more
+- **Vision/Multimodal Support**: Process images with vision-capable models
+- **2 Embedding Models**: High-quality text embeddings
+- **Real-time Streaming**: Token-by-token response streaming
+- **Full OpenAI API Compatibility**: Drop-in replacement for OpenAI API
+- **Comprehensive Error Handling**: Robust error reporting and recovery
+- **Extensive Model Options**: Fine-tune temperature, tokens, penalties, and more
+- **Multiple Input Types**: Text, images (URL/local files), and mixed content
 
 ## Installation
 
@@ -74,6 +76,12 @@ llm install -e .  # Not pip install -e .
 
 The plugin provides access to the following models with their short names:
 
+#### Vision Models (Support Images + Text)
+- `llama-3.2-90b-vision` - meta-llama/Llama-3.2-90B-Vision-Instruct (16K context) 🖼️
+- `qwen2-vl-7b` - Qwen/Qwen2-VL-7B-Instruct 🖼️
+
+#### Text-Only Models
+
 - `llama-4-maverick-17b` - meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 (430K context)
 - `deepseek-r1-distill-llama-70b` - deepseek-ai/DeepSeek-R1-Distill-Llama-70B (128K context)
 - `qwen3-235b` - Qwen/Qwen3-235B-A22B-FP8 (8K context)
@@ -103,8 +111,6 @@ The plugin provides access to the following models with their short names:
 - `granite-3.1-8b` - ibm-granite/granite-3.1-8b-instruct (128K context)
 - `0x-lite` - ozone-ai/0x-lite (32K context)
 - `phi-3.5-mini` - microsoft/Phi-3.5-mini-instruct (128K context)
-- `llama-3.2-90b-vision` - meta-llama/Llama-3.2-90B-Vision-Instruct (16K context)
-- `qwen2-vl-7b` - Qwen/Qwen2-VL-7B-Instruct
 
 ### Embedding Models
 
@@ -135,6 +141,46 @@ llm -m qwen3-235b "Tell me a story"
 # Disable streaming
 llm -m llama-3.3-70b "Hello" --no-stream
 ```
+
+### Vision/Multimodal Support
+
+The plugin supports vision models that can process both text and images. Use the `-a` (attachment) flag to include images:
+
+```bash
+# Analyze an image from URL
+llm 'Describe this image' -a https://example.com/image.jpg -m llama-3.2-90b-vision
+
+# Analyze a local image file
+llm 'What do you see?' -a ./photo.png -m qwen2-vl-7b
+
+# Multiple images
+llm 'Compare these images' -a image1.jpg -a image2.png -m llama-3.2-90b-vision
+
+# Text + image combination
+llm 'Is this a cat or dog?' -a pet.jpg -m llama-3.2-90b-vision
+
+# Detailed analysis
+llm 'Analyze this chart and explain the trends' -a chart.png -m qwen2-vl-7b
+```
+
+#### Supported Image Formats
+- **JPEG** (`.jpg`, `.jpeg`)
+- **PNG** (`.png`)
+- **GIF** (`.gif`)
+- **WebP** (`.webp`)
+
+#### Supported Input Methods
+- **URLs**: Direct links to images on the web
+- **Local Files**: Images stored on your computer
+- **Mixed Content**: Combine text prompts with multiple images
+
+#### Vision Model Capabilities
+- **Image Description**: Detailed descriptions of image content
+- **Object Detection**: Identify and locate objects in images
+- **Text Recognition**: Read text within images (OCR)
+- **Scene Analysis**: Understand context and relationships
+- **Chart/Graph Analysis**: Interpret data visualizations
+- **Comparison**: Compare multiple images side-by-side
 
 ### Options
 
@@ -202,6 +248,30 @@ response = model.prompt(
 # Embeddings
 embed_model = llm.get_embed_model("bge-multilingual-gemma2")
 embeddings = embed_model.embed(["Hello", "World"])
+
+# Vision/Multimodal
+vision_model = llm.get_model("llama-3.2-90b-vision")
+
+# Image from URL
+response = vision_model.prompt(
+    "Describe this image",
+    attachments=[llm.Attachment.from_url("https://example.com/image.jpg")]
+)
+
+# Local image file
+response = vision_model.prompt(
+    "What's in this photo?",
+    attachments=[llm.Attachment.from_path("./photo.png")]
+)
+
+# Multiple images
+response = vision_model.prompt(
+    "Compare these two images",
+    attachments=[
+        llm.Attachment.from_path("./image1.jpg"),
+        llm.Attachment.from_path("./image2.jpg")
+    ]
+)
 ```
 
 ## Development
@@ -255,6 +325,9 @@ llm -m deepseek-r1 "Count to 10"
 # Test embeddings
 llm embed -m bge-multilingual-gemma2 "Test embedding"
 
+# Test vision models
+llm 'Describe this image' -a https://static.simonwillison.net/static/2024/pelicans.jpg -m llama-3.2-90b-vision
+
 # Check plugin registration
 llm plugins
 ```
@@ -285,9 +358,11 @@ llm -m llama-3.3-70b "Hello"
 
 IO Intelligence provides free daily limits per account:
 
-- **Chat Models**: 1,000,000 tokens daily chat quota, 500,000 tokens daily API quota
+- **Text Chat Models**: 1,000,000 tokens daily chat quota, 500,000 tokens daily API quota
+- **Vision Models**: 500,000 tokens daily API quota (images count toward token usage)
 - **Embedding Models**: 50,000,000 tokens daily quota
-- **Vision Models**: 500,000 tokens daily API quota only
+
+**Note**: Vision models consume more tokens due to image processing. Large or high-resolution images will use more of your daily quota.
 
 ## Contributing
 
