@@ -130,7 +130,11 @@ class IOIntelligenceModel(llm.Model):
             if conversation:
                 for message in conversation.responses:
                     if message.prompt:
-                        messages.append({"role": "user", "content": message.prompt})
+                        # Ensure we get the string content, not the Prompt object
+                        prompt_content = message.prompt
+                        if hasattr(prompt_content, 'prompt'):
+                            prompt_content = prompt_content.prompt
+                        messages.append({"role": "user", "content": str(prompt_content)})
                     if message.text():
                         messages.append({"role": "assistant", "content": message.text()})
             
@@ -150,11 +154,27 @@ class IOIntelligenceModel(llm.Model):
                 "stream": stream
             }
             
+            # Add options if they exist, being careful about JSON serialization
             if prompt.options:
-                options_dict = prompt.options.model_dump(exclude_none=True)
-                data.update(options_dict)
+                try:
+                    options_dict = prompt.options.model_dump(exclude_none=True)
+                    logger.debug(f"Options dict: {options_dict}")
+                    # Only add serializable options
+                    for key, value in options_dict.items():
+                        if isinstance(value, (str, int, float, bool, type(None))):
+                            data[key] = value
+                        else:
+                            logger.warning(f"Skipping non-serializable option: {key}={value}")
+                except Exception as e:
+                    logger.warning(f"Failed to process options: {e}")
             
             logger.debug(f"Making request to {self.api_base}/chat/completions")
+            # Safe debug logging - avoid JSON serialization issues
+            try:
+                debug_data = {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool, type(None), list, dict))}
+                logger.debug(f"Request data keys: {list(debug_data.keys())}")
+            except Exception as e:
+                logger.debug(f"Debug serialization error: {e}")
             
             if stream:
                 # Use streaming for real-time parsing
