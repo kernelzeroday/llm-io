@@ -106,7 +106,7 @@ llm -m qwen3-235b --functions my_functions.py --td 'What is the area of a circle
 | Model ID | Full Name | Context Length | Tool Support |
 |----------|-----------|----------------|--------------|
 | `llama-3.3-70b` | meta-llama/Llama-3.3-70B-Instruct | 128K | ✅ Full |
-| `qwen3-235b` | Qwen/Qwen3-235B-A22B-FP8 | 8K | ✅ Full |
+| `qwen3-235b` | Qwen/Qwen3-235B-A22B-FP8 | 32K | ✅ Full |
 | `llama-3.2-90b-vision` | meta-llama/Llama-3.2-90B-Vision-Instruct | 16K | ✅ Full |
 | `llama-4-maverick-17b` | meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 | 430K | ✅ Full |
 | `llama-3.1-nemotron-70b` | neuralmagic/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic | 128K | ✅ Full |

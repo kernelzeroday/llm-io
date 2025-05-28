@@ -18,7 +18,7 @@ def register_models(register):
     models = [
         ("llama-4-maverick-17b", "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", 430000),
         ("deepseek-r1-distill-llama-70b", "deepseek-ai/DeepSeek-R1-Distill-Llama-70B", 128000),
-        ("qwen3-235b", "Qwen/Qwen3-235B-A22B-FP8", 8000),
+        ("qwen3-235b", "Qwen/Qwen3-235B-A22B-FP8", 32000),
         ("deepseek-r1", "deepseek-ai/DeepSeek-R1", 128000),
         ("qwq-32b", "Qwen/QwQ-32B", 32000),
         ("deepseek-r1-distill-qwen-32b", "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", 128000),

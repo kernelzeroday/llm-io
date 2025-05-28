@@ -96,20 +96,44 @@ llm install llm-tools-quickjs
 llm --tool quickjs "Calculate factorial of 5" --td
 ```
 
+### Custom Functions (Inline)
+
+```bash
+# Powerful math calculator (one-liner)
+llm -m llama-3.3-70b --functions 'def calc(expression): import math; return eval(expression, {"math": math, "sqrt": math.sqrt, "sin": math.sin, "pi": math.pi})' --td 'Calculate sqrt(144) + sin(pi/2) * 10'
+
+# Simple operations
+llm --functions 'def add(a, b): return a + b' --td 'Add 15 and 27'
+
+# String manipulation
+llm --functions 'def reverse(text): return text[::-1]' --td 'Reverse the word "hello"'
+```
+
+### File-based Functions
+
+```bash
+# Create a functions file
+echo 'def calc(expression): import math; return eval(expression, {"math": math, "sqrt": math.sqrt, "sin": math.sin, "pi": math.pi})' > my_functions.py
+
+# Use the functions file
+llm -m qwen3-235b --functions my_functions.py --td 'What is the area of a circle with radius 5?'
+```
+
 ## Available Models
 
 ### Chat Models
 
-| Model ID | Full Name | Context Length |
-|----------|-----------|----------------|
-| `llama-3.3-70b` | meta-llama/Llama-3.3-70B-Instruct | 128K |
-| `qwen3-235b` | Qwen/Qwen3-235B-A22B-FP8 | 8K |
-| `deepseek-r1` | deepseek-ai/DeepSeek-R1 | 128K |
-| `gemma-3-27b` | google/gemma-3-27b-it | 8K |
-| `mistral-large-2411` | mistralai/Mistral-Large-Instruct-2411 | 128K |
-| `phi-4` | microsoft/phi-4 | 16K |
+| Model ID | Full Name | Context Length | Tool Support |
+|----------|-----------|----------------|--------------|
+| `llama-3.3-70b` | meta-llama/Llama-3.3-70B-Instruct | 128K | ✅ Full |
+| `qwen3-235b` | Qwen/Qwen3-235B-A22B-FP8 | 32K | ✅ Full |
+| `llama-3.2-90b-vision` | meta-llama/Llama-3.2-90B-Vision-Instruct | 16K | ✅ Full |
+| `llama-4-maverick-17b` | meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8 | 430K | ✅ Full |
+| `llama-3.1-nemotron-70b` | neuralmagic/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic | 128K | ✅ Full |
+| `deepseek-r1` | deepseek-ai/DeepSeek-R1 | 128K | ❌ Server config |
+| `phi-4` | microsoft/phi-4 | 16K | ❌ Server config |
 
-*And 25 more models - see full list with `llm models list`*
+*And 24 more models - see full list with `llm models list`*
 
 ### Vision Models
 
@@ -137,6 +161,9 @@ llm -m llama-3.3-70b --tool simple_eval "What's the square root of 12345?" --td
 
 # Database query
 llm -m llama-3.3-70b -T 'SQLite("data.db")' "Show top 5 customers by revenue" --td
+
+# Custom function calculation
+llm -m qwen3-235b --functions 'def calc(expression): import math; return eval(expression, {"math": math, "sqrt": math.sqrt, "sin": math.sin, "pi": math.pi})' --td 'Calculate sqrt(144) + sin(pi/2) * 10'
 ```
 
 ### Vision Analysis
@@ -165,6 +192,20 @@ print(response.text())
 # Check tool calls
 for tool_call in response.tool_calls:
     print(f"Tool: {tool_call.name}, Args: {tool_call.arguments}")
+
+# Using custom functions
+import math
+
+def calc(expression):
+    """Powerful calculator with math functions"""
+    safe_dict = {"math": math, "sqrt": math.sqrt, "sin": math.sin, "pi": math.pi}
+    return str(eval(expression, safe_dict))
+
+# Register as tool and use
+response = model.prompt(
+    "Calculate the circumference of a circle with radius 10",
+    tools=[calc]  # Functions can be used directly as tools
+)
 ```
 
 ## How Tool Calling Works
@@ -187,12 +228,21 @@ This approach bridges the gap between IO Intelligence's text-based responses and
 - `SQLite` - Database queries and schema inspection
 - `quickjs` - JavaScript code execution
 - `Datasette` - Remote database queries
+- **Custom functions** - Inline Python functions via `--functions`
 
 ✅ **All tool types supported:**
 - Simple tools (no parameters)
 - Parameterized tools (with arguments)
 - Complex toolbox-style tools (multiple methods)
 - Async and sync tools
+- **Inline functions** (one-liners and file-based)
+- **Custom eval functions** with math libraries
+
+✅ **Tested Models:**
+- `llama-3.3-70b` - Full tool support, multiple verification calls
+- `qwen3-235b` - Full tool support, clean execution with thinking process
+- `llama-3.2-90b-vision` - Vision + tool calling combined
+- `llama-4-maverick-17b` - Advanced tool calling capabilities
 
 ## Configuration
 
@@ -245,16 +295,19 @@ python test_sqlite_real.py
 
 If tools aren't working:
 
-1. **Check model support** - Use models like `llama-3.3-70b` that support tool calling
+1. **Check model support** - Use models like `llama-3.3-70b` or `qwen3-235b` that support tool calling
 2. **Verify API key** - Ensure `IOINTELLIGENCE_API_KEY` is set correctly
 3. **Use debug mode** - Add `--td` flag to see tool call details
 4. **Check tool installation** - Ensure tool plugins are installed
+5. **Parameter names** - For custom functions, use parameter names the model expects (e.g., `expression` not `expr`)
 
 ### Common Errors
 
-- `"does not support tools"` - Use a tool-compatible model
+- `"does not support tools"` - Use a tool-compatible model (see table above)
 - `"API key not found"` - Set the `IOINTELLIGENCE_API_KEY` environment variable
 - `"Chain limit exceeded"` - Model made too many tool calls (safety limit)
+- `"unexpected keyword argument"` - Check function parameter names match model expectations
+- `"missing required argument"` - Ensure function parameters are properly defined
 
 ## License
 
