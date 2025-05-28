@@ -28,14 +28,17 @@ Successfully implemented complete tool calling support for the LLM IO Intelligen
 ## Model Compatibility
 
 ### ✅ Working Models (Tool Calling Enabled)
-- `llama-3.3-70b` - Full tool support
-- `llama-3.2-90b-vision` - Vision + tools
-- `llama-4-maverick-17b` - Advanced tool calling
+- `llama-3.3-70b` - Full tool support, multiple verification calls
+- `qwen3-235b` - Full tool support, clean execution with thinking process
+- `llama-3.2-90b-vision` - Vision + tools combined
+- `llama-4-maverick-17b` - Advanced tool calling capabilities
 - `llama-3.1-nemotron-70b` - Reliable tool execution
 
 ### ❌ Models Without Tool Support
-- `qwen3-235b` - Returns vLLM configuration errors
+- `deepseek-r1` - Returns vLLM configuration errors
 - `phi-4` - Missing server-side tool configuration
+- `gemma-3-27b` - Text responses without tool calls
+- `mistral-large-2411` - Text responses without tool calls
 
 ## Tool Compatibility
 
@@ -44,6 +47,8 @@ Successfully implemented complete tool calling support for the LLM IO Intelligen
 - **Mathematical**: `simple_eval` (expressions)
 - **Database**: `SQLite` (queries, schema)
 - **JavaScript**: `quickjs` (code execution)
+- **Custom Functions**: Inline Python functions via `--functions`
+- **Powerful Eval**: Math libraries (sqrt, sin, cos, pi, etc.)
 - **All parameter types**: Simple, parameterized, complex
 
 ## Usage Examples
@@ -57,6 +62,12 @@ llm --tool simple_eval "Calculate 15 * 23 + 7" --td
 
 # Database queries
 llm -T 'SQLite("database.db")' "Show all users" --td
+
+# Custom function (one-liner)
+llm -m llama-3.3-70b --functions 'def calc(expression): import math; return eval(expression, {"math": math, "sqrt": math.sqrt, "sin": math.sin, "pi": math.pi})' --td 'Calculate sqrt(144) + sin(pi/2) * 10'
+
+# File-based functions
+llm -m qwen3-235b --functions eval_functions.py --td 'What is the area of a circle with radius 5?'
 ```
 
 ## Files Structure

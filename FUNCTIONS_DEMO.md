@@ -38,8 +38,8 @@ llm -m llama-3.3-70b --functions eval_functions.py --td 'Calculate the square ro
 ### Example Expressions
 
 ```python
-# Advanced math
-calc("sqrt(144) + sin(pi/2) * 10")  # → "23.0"
+# Advanced math (TESTED ✅)
+calc("sqrt(144) + sin(pi/2) * 10")  # → "22.0" (√144=12, sin(π/2)=1, 12+1×10=22)
 calc("log(e) + cos(0)")              # → "2.0" 
 calc("pow(2, 8) / 4")                # → "64.0"
 
@@ -70,16 +70,21 @@ This bridges the gap between IO Intelligence's text responses and LLM's tool cal
 
 ### With API Key Set
 ```bash
-export IOINTELLIGENCE_API_KEY="your-real-api-key"
+export IOINTELLIGENCE_API_KEY="your-api-key-here"
 
-# Test basic functionality
-llm -m llama-3.3-70b --functions eval_functions.py --td 'What is 15 squared plus the square root of 81?'
+# ✅ TESTED: Basic functionality with Llama
+llm -m llama-3.3-70b --functions eval_functions.py --td 'Calculate sqrt(144) + sin(pi/2) * 10'
+# Result: 22.0 (multiple verification calls, hit chain limit)
+
+# ✅ TESTED: Basic functionality with Qwen  
+llm -m qwen3-235b --functions eval_functions.py --td 'Calculate sqrt(144) + sin(pi/2) * 10'
+# Result: 22.0 (clean execution with thinking process)
 
 # Complex calculations
 llm -m llama-3.3-70b --functions eval_functions.py --td 'Calculate the area of a circle with radius 5 using pi'
 
 # Multiple operations
-llm -m llama-3.3-70b --functions eval_functions.py --td 'Find the maximum of these values: sin(pi/4), cos(pi/3), sqrt(0.5)'
+llm -m qwen3-235b --functions eval_functions.py --td 'Find the maximum of these values: sin(pi/4), cos(pi/3), sqrt(0.5)'
 ```
 
 ### One-liner Variations
