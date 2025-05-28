@@ -56,6 +56,7 @@ def register_models(register):
 
 class IOIntelligenceModel(llm.Model):
     can_stream = True
+    supports_tools = True
     attachment_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     
     def __init__(self, model_id: str, full_model_name: str, context_length: Optional[int] = None):
@@ -140,8 +141,47 @@ class IOIntelligenceModel(llm.Model):
                     if message.text():
                         messages.append({"role": "assistant", "content": message.text()})
             
-            if prompt.system:
+            # Enhanced system prompt for better tool calling behavior
+            base_system_prompt = prompt.system if prompt.system else ""
+            if hasattr(prompt, 'tools') and prompt.tools:
+                # Create a list of available tools for the prompt
+                tool_descriptions = []
+                for tool in prompt.tools:
+                    tool_descriptions.append(f"- {tool.name}: {tool.description}")
+                tools_list = "\n".join(tool_descriptions)
+                
+                tool_calling_instructions = f"""
+
+You have access to the following tools:
+{tools_list}
+
+TOOL CALLING INSTRUCTIONS:
+1. When the user's question can be answered using one of these tools, call the appropriate tool
+2. To call a tool, output EXACTLY this JSON format: {{"name": "tool_name", "arguments": {{}}}}
+3. For tools with no parameters, use empty arguments: {{"name": "tool_name", "arguments": {{}}}}
+4. For tools with parameters, include them in arguments: {{"name": "tool_name", "arguments": {{"param": "value"}}}}
+5. After calling a tool, the system will execute it and provide results
+6. Only call tools when they are relevant to answering the user's question
+
+EXAMPLE:
+User: "What version?"
+Assistant: {{"name": "llm_version", "arguments": {{}}}}
+
+Do not explain what you're doing, just output the JSON when you need to call a tool."""
+                enhanced_system_prompt = base_system_prompt + tool_calling_instructions
+                messages.insert(0, {"role": "system", "content": enhanced_system_prompt})
+            elif prompt.system:
                 messages.insert(0, {"role": "system", "content": prompt.system})
+            
+            # Handle tool results from previous calls
+            if hasattr(prompt, 'tool_results') and prompt.tool_results:
+                logger.debug(f"Processing {len(prompt.tool_results)} tool results")
+                for tool_result in prompt.tool_results:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_result.tool_call_id,
+                        "content": str(tool_result.output)
+                    })
             
             # Handle attachments for vision models
             user_content = []
@@ -202,6 +242,48 @@ class IOIntelligenceModel(llm.Model):
                 "stream": stream
             }
             
+            # Add tool calling optimization parameters
+            if hasattr(prompt, 'tools') and prompt.tools:
+                # Use lower temperature for more deterministic tool calling
+                data["temperature"] = 0.1
+                data["top_p"] = 0.9
+                # Add max_tokens to prevent overly long responses
+                data["max_tokens"] = 1000
+            
+            # Add tools if they exist
+            if hasattr(prompt, 'tools') and prompt.tools:
+                logger.debug(f"Adding {len(prompt.tools)} tools to request")
+                tools = []
+                for tool in prompt.tools:
+                    tool_def = {
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description or "",
+                        }
+                    }
+                    
+                    # Try to get the tool schema from various possible attributes
+                    schema = None
+                    if hasattr(tool, 'parameters') and tool.parameters:
+                        schema = tool.parameters
+                    elif hasattr(tool, 'schema') and tool.schema:
+                        schema = tool.schema
+                    elif hasattr(tool, 'input_schema') and tool.input_schema:
+                        schema = tool.input_schema
+                    
+                    if schema:
+                        tool_def["function"]["parameters"] = schema
+                    else:
+                        # Default empty schema if none provided
+                        tool_def["function"]["parameters"] = {"type": "object", "properties": {}}
+                    
+                    tools.append(tool_def)
+                
+                data["tools"] = tools
+                # Use "none" because server doesn't have --enable-auto-tool-choice flag
+                data["tool_choice"] = "none"
+            
             # Add options if they exist, being careful about JSON serialization
             if prompt.options:
                 try:
@@ -221,34 +303,87 @@ class IOIntelligenceModel(llm.Model):
             try:
                 debug_data = {k: v for k, v in data.items() if isinstance(v, (str, int, float, bool, type(None), list, dict))}
                 logger.debug(f"Request data keys: {list(debug_data.keys())}")
+                # Log the actual tools being sent
+                if "tools" in data:
+                    logger.debug(f"Tools being sent to API: {json.dumps(data['tools'], indent=2)}")
             except Exception as e:
                 logger.debug(f"Debug serialization error: {e}")
             
+            # Track tool calls to prevent duplicates
+            called_tools = set()
+            # Accumulate content for tool call parsing
+            accumulated_content = ""
+            
             if stream:
                 # Use streaming for real-time parsing
-                with httpx.stream(
-                    "POST",
-                    f"{self.api_base}/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=30.0
-                ) as http_response:
-                    http_response.raise_for_status()
-                    
-                    for line in http_response.iter_lines():
-                        if line.startswith("data: "):
-                            chunk_data = line[6:]  # Remove "data: " prefix
-                            if chunk_data.strip() == "[DONE]":
-                                break
-                            
-                            try:
-                                chunk = json.loads(chunk_data)
-                                if "choices" in chunk and chunk["choices"]:
-                                    delta = chunk["choices"][0].get("delta", {})
-                                    if "content" in delta and delta["content"]:
-                                        yield delta["content"]
-                            except json.JSONDecodeError:
-                                continue
+                with httpx.Client() as client:
+                    with client.stream(
+                        "POST",
+                        f"{self.api_base}/chat/completions",
+                        headers=headers,
+                        json=data,
+                        timeout=30.0
+                    ) as http_response:
+                        # Check for errors before processing
+                        if http_response.status_code >= 400:
+                            # Read error content before raising
+                            error_content = b""
+                            for chunk in http_response.iter_bytes():
+                                error_content += chunk
+                            error_text = error_content.decode('utf-8')
+                            logger.error(f"HTTP error {http_response.status_code}: {error_text}")
+                            raise httpx.HTTPStatusError(f"HTTP {http_response.status_code}", request=http_response.request, response=http_response)
+                        
+                        http_response.raise_for_status()
+                        
+                        for line in http_response.iter_lines():
+                            if line.startswith("data: "):
+                                chunk_data = line[6:]  # Remove "data: " prefix
+                                if chunk_data.strip() == "[DONE]":
+                                    break
+                                
+                                try:
+                                    chunk = json.loads(chunk_data)
+                                    logger.debug(f"Streaming chunk: {chunk}")
+                                    if "choices" in chunk and chunk["choices"]:
+                                        delta = chunk["choices"][0].get("delta", {})
+                                        logger.debug(f"Delta: {delta}")
+                                        
+                                        if "content" in delta and delta["content"]:
+                                            content = delta["content"]
+                                            # Accumulate content for tool call parsing
+                                            accumulated_content += content
+                                            yield content
+                                        
+                                        # Handle tool calls in streaming with deduplication
+                                        if "tool_calls" in delta and delta["tool_calls"]:
+                                            logger.debug(f"Found tool calls in delta: {delta['tool_calls']}")
+                                            for tool_call in delta["tool_calls"]:
+                                                if response and "id" in tool_call and "function" in tool_call:
+                                                    # Safely get arguments, handling streaming chunks
+                                                    function_data = tool_call["function"]
+                                                    arguments_str = function_data.get("arguments", "")
+                                                    tool_signature = f"{function_data['name']}:{arguments_str}"
+                                                    if tool_signature not in called_tools:
+                                                        called_tools.add(tool_signature)
+                                                        try:
+                                                            arguments = json.loads(arguments_str) if arguments_str else {}
+                                                        except (json.JSONDecodeError, TypeError):
+                                                            arguments = {}
+                                                        logger.debug(f"Adding tool call: {function_data['name']} with args {arguments}")
+                                                        response.add_tool_call(llm.ToolCall(
+                                                            name=function_data["name"],
+                                                            arguments=arguments,
+                                                            tool_call_id=tool_call["id"]
+                                                        ))
+                                                    else:
+                                                        logger.debug(f"Skipping duplicate tool call: {tool_signature}")
+                                except json.JSONDecodeError:
+                                    continue
+                
+                # Parse accumulated content for tool calls after streaming is complete
+                if response and hasattr(prompt, 'tools') and prompt.tools and accumulated_content:
+                    self._parse_text_tool_calls(accumulated_content, response, prompt.tools, called_tools)
             else:
                 # Non-streaming request
                 with httpx.Client() as client:
@@ -260,10 +395,42 @@ class IOIntelligenceModel(llm.Model):
                     )
                     http_response.raise_for_status()
                     result = http_response.json()
+                    logger.debug(f"Non-streaming result: {result}")
                     
                     if "choices" in result and result["choices"]:
-                        content = result["choices"][0]["message"]["content"]
-                        yield content
+                        choice = result["choices"][0]
+                        message = choice["message"]
+                        logger.debug(f"Message: {message}")
+                        
+                        if "content" in message and message["content"]:
+                            content = message["content"]
+                            # Parse tool calls from the complete content
+                            if response and hasattr(prompt, 'tools') and prompt.tools:
+                                self._parse_text_tool_calls(content, response, prompt.tools, called_tools)
+                            yield content
+                        
+                        # Handle tool calls in non-streaming with deduplication
+                        if "tool_calls" in message and message["tool_calls"]:
+                            logger.debug(f"Found tool calls in message: {message['tool_calls']}")
+                            for tool_call in message["tool_calls"]:
+                                if response:
+                                    tool_signature = f"{tool_call['function']['name']}:{tool_call['function'].get('arguments', '')}"
+                                    if tool_signature not in called_tools:
+                                        called_tools.add(tool_signature)
+                                        try:
+                                            arguments = json.loads(tool_call["function"]["arguments"]) if tool_call["function"]["arguments"] else {}
+                                        except (json.JSONDecodeError, TypeError):
+                                            arguments = {}
+                                        logger.debug(f"Adding tool call: {tool_call['function']['name']} with args {arguments}")
+                                        response.add_tool_call(llm.ToolCall(
+                                            name=tool_call["function"]["name"],
+                                            arguments=arguments,
+                                            tool_call_id=tool_call["id"]
+                                        ))
+                                    else:
+                                        logger.debug(f"Skipping duplicate tool call: {tool_signature}")
+                        else:
+                            logger.debug("No tool_calls found in message")
                     else:
                         raise llm.ModelError("No response content received")
                         
@@ -273,6 +440,46 @@ class IOIntelligenceModel(llm.Model):
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             raise llm.ModelError(f"Request failed: {str(e)}")
+
+    def _parse_text_tool_calls(self, content: str, response, tools, called_tools):
+        """Parse JSON tool calls from text content and convert to actual tool calls"""
+        import re
+        
+        # Look for JSON patterns that look like tool calls - flexible pattern
+        json_pattern = r'\{"name":\s*"([^"]+)",\s*"arguments":\s*(\{.*?\})\}'
+        matches = re.findall(json_pattern, content)
+        
+        for tool_name, arguments_str in matches:
+            # Check if this tool exists in our available tools
+            tool_found = False
+            for tool in tools:
+                if tool.name == tool_name:
+                    tool_found = True
+                    break
+            
+            if tool_found:
+                tool_signature = f"{tool_name}:{arguments_str}"
+                if tool_signature not in called_tools:
+                    called_tools.add(tool_signature)
+                    try:
+                        arguments = json.loads(arguments_str) if arguments_str.strip() != '{}' else {}
+                    except (json.JSONDecodeError, TypeError):
+                        arguments = {}
+                    
+                    # Generate a unique tool call ID
+                    import uuid
+                    tool_call_id = f"text-parsed-{uuid.uuid4().hex[:16]}"
+                    
+                    logger.debug(f"Parsed text tool call: {tool_name} with args {arguments}")
+                    response.add_tool_call(llm.ToolCall(
+                        name=tool_name,
+                        arguments=arguments,
+                        tool_call_id=tool_call_id
+                    ))
+                    
+                    # Note: We don't remove the JSON from content since we want to show the model's response
+        
+        return content
 
     def get_key(self):
         api_key = os.environ.get(self.key_env_var)
