@@ -21,6 +21,7 @@ def register_models(register):
         ("qwen3-235b", "Qwen/Qwen3-235B-A22B-FP8", 32000),
         ("deepseek-r1", "deepseek-ai/DeepSeek-R1", 128000),
         ("deepseek-r1-0528", "deepseek-ai/DeepSeek-R1-0528", 128000),
+        ("deepseek-r1-0528", "deepseek-ai/DeepSeek-R1-0528", 128000),
         ("qwq-32b", "Qwen/QwQ-32B", 32000),
         ("deepseek-r1-distill-qwen-32b", "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B", 128000),
         ("llama-3.3-70b", "meta-llama/Llama-3.3-70B-Instruct", 128000),

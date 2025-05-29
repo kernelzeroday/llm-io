@@ -1,6 +1,7 @@
 import random
 import json
 import string
+from typing import List
 from datetime import datetime, timedelta
 
 def generate_data(data_type: str, count: int = 10, **kwargs) -> str:

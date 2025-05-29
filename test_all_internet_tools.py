@@ -7,6 +7,7 @@ sys.path.append('test_functions')
 from ddg_search import ddg_search, search_news_ddg, curl_get, fetch_page_content
 from news_search import search_news, get_trending_topics, fetch_article
 from web_tools import web_request
+from web_search import check_url_status
 from api_tools import api_request
 from data_generator import generate_data
 from crypto_utils import crypto_utils
@@ -65,7 +66,7 @@ def test_comprehensive_workflow():
     print("\n6️⃣ Testing crypto utilities...")
     test_text = "Hello World 2025"
     hash_result = json.loads(crypto_utils("hash", test_text, algorithm="sha256"))
-    print(f"   SHA256 of '{test_text}': {hash_result['result'][:16]}...")
+    print(f"   SHA256 of '{test_text}': {hash_result['result']['hash'][:16]}...")
     
     key_result = json.loads(crypto_utils("generate_key", "", length=16, key_type="password"))
     print(f"   Generated secure password: {key_result['result']}")
@@ -81,7 +82,7 @@ def test_comprehensive_workflow():
     
     # 8. Web utilities
     print("\n8️⃣ Testing web utilities...")
-    status_check = json.loads(web_request("https://www.google.com", "check_status"))
+    status_check = json.loads(check_url_status("https://www.google.com"))
     if 'error' not in status_check:
         print(f"   Google.com status: {status_check['status_code']} ({status_check['response_time']:.2f}s)")
     

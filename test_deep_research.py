@@ -80,7 +80,7 @@ def test_research_topic():
         # Show research summary
         summary = result['summary']
         print(f"\n📋 RESEARCH SUMMARY:")
-        print(f"   Total sources: {summary['total_sources']}")
+        print(f"   Total sources: {summary['source_count']}")
         print(f"   Total words analyzed: {summary['total_words_analyzed']}")
         print(f"   Average relevance: {summary['average_relevance_score']}")
         print(f"   Research quality: {summary['research_quality']}")

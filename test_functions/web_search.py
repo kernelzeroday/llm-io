@@ -156,7 +156,13 @@ def check_url_status(url: str) -> str:
         req = urllib.request.Request(url, method='HEAD')
         req.add_header('User-Agent', 'LLM-Agent/1.0 (Status Checker)')
         
+        import time
+        start_time = time.time()
+        
         with urllib.request.urlopen(req, timeout=5) as response:
+            end_time = time.time()
+            response_time = end_time - start_time
+            
             return json.dumps({
                 "url": url,
                 "status": "accessible",
@@ -164,7 +170,8 @@ def check_url_status(url: str) -> str:
                 "content_type": response.headers.get('Content-Type', 'unknown'),
                 "server": response.headers.get('Server', 'unknown'),
                 "final_url": response.geturl(),
-                "redirected": response.geturl() != url
+                "redirected": response.geturl() != url,
+                "response_time": round(response_time, 2)
             }, indent=2)
             
     except urllib.error.HTTPError as e:
