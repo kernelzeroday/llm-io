@@ -249,7 +249,7 @@ Do not explain what you're doing, just output the JSON when you need to call a t
                 data["temperature"] = 0.1
                 data["top_p"] = 0.9
                 # Add max_tokens to prevent overly long responses
-                data["max_tokens"] = 1000
+                data["max_tokens"] = 30000
             
             # Add tools if they exist
             if hasattr(prompt, 'tools') and prompt.tools:
