@@ -3,7 +3,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import re
-from datetime import datetime
+
 
 def web_request(url: str, method: str = "GET", **kwargs) -> str:
     """
@@ -46,6 +46,7 @@ def web_request(url: str, method: str = "GET", **kwargs) -> str:
 
 def _http_request(url: str, method: str = "GET", **kwargs) -> str:
     """Perform HTTP request"""
+    import datetime
     timeout = kwargs.get('timeout', 10)
     headers = kwargs.get('headers', {})
     data = kwargs.get('data', None)
@@ -92,7 +93,7 @@ def _http_request(url: str, method: str = "GET", **kwargs) -> str:
                 "content": content_text[:5000] + "..." if len(content_text) > 5000 else content_text,
                 "truncated": len(content_text) > 5000,
                 "request_method": method.upper(),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.datetime.now().isoformat()
             }, indent=2)
             
     except urllib.error.HTTPError as e:
@@ -193,6 +194,7 @@ def _extract_links(url: str, **kwargs) -> str:
 
 def _extract_text(url: str, **kwargs) -> str:
     """Extract clean text content from HTML page"""
+    import datetime
     try:
         # Get page content
         response_data = json.loads(_http_request(url, "GET", **kwargs))
@@ -230,7 +232,7 @@ def _extract_text(url: str, **kwargs) -> str:
             "word_count": word_count,
             "character_count": char_count,
             "truncated": len(content) > 3000,
-            "extracted_at": datetime.now().isoformat()
+            "extracted_at": datetime.datetime.now().isoformat()
         }, indent=2)
         
     except Exception as e:

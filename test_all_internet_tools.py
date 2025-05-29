@@ -84,7 +84,10 @@ def test_comprehensive_workflow():
     print("\n8️⃣ Testing web utilities...")
     status_check = json.loads(check_url_status("https://www.google.com"))
     if 'error' not in status_check:
+    if 'response_time' in status_check:
         print(f"   Google.com status: {status_check['status_code']} ({status_check['response_time']:.2f}s)")
+    else:
+        print(f"   Google.com status: {status_check['status_code']}")
     
     print("\n✅ COMPREHENSIVE TEST COMPLETED!")
     print("All 7 internet tool functions are working correctly.")
