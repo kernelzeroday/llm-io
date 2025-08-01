@@ -10,6 +10,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import hashlib
 import mimetypes
+import queue
+import threading
 
 # Configure logging to be less verbose - only warnings and errors
 logging.basicConfig(level=logging.WARNING)
@@ -67,7 +69,7 @@ class IOIntelligenceModel(llm.Model):
         messages.append({"role": "user", "content": prompt.prompt})
         return messages
 
-    async def execute_async_with_tools(self, prompt, tools=None, get_env_var=None):
+    async def execute_async_with_tools(self, prompt, tools=None, get_env_var=None, stream=False):
         """Execute the model asynchronously with tool support"""
         api_key = get_env_var("IOINTELLIGENCE_API_KEY") if get_env_var else os.environ.get("IOINTELLIGENCE_API_KEY")
         if not api_key:
@@ -80,7 +82,7 @@ class IOIntelligenceModel(llm.Model):
         payload = {
             "model": self.full_model_name,
             "messages": messages,
-            "stream": False,
+            "stream": stream,
             "tools": tools if tools else [],
         }
 
@@ -108,24 +110,63 @@ class IOIntelligenceModel(llm.Model):
                         logger.error(f"API request failed with status {response.status}: {error_text}")
                         raise Exception(f"API request failed: {response.status} - {error_text}")
 
-                    result = await response.json()
-                    logger.debug(f"Received response: {result}")
-
-                    # Extract the content and tool calls
-                    choice = result["choices"][0]
-                    message = choice["message"]
-                    
-                    # Handle tool calls if present
-                    if "tool_calls" in message and message["tool_calls"]:
-                        return {
-                            "content": message.get("content", ""),
-                            "tool_calls": message["tool_calls"]
-                        }
+                    if stream:
+                        # Handle streaming response - parse SSE format
+                        buffer = ""
+                        async for chunk in response.content:
+                            if chunk:
+                                buffer += chunk.decode('utf-8')
+                                # Process complete lines
+                                while '\n' in buffer:
+                                    line, buffer = buffer.split('\n', 1)
+                                    line = line.strip()
+                                    
+                                    # Skip empty lines and non-data lines
+                                    if not line or not line.startswith('data:'):
+                                        continue
+                                        
+                                    # Extract the data part
+                                    data_str = line[5:].strip()  # Remove 'data:' prefix
+                                    
+                                    # Check for end of stream
+                                    if data_str == '[DONE]':
+                                        break
+                                        
+                                    try:
+                                        # Parse the JSON data
+                                        data = json.loads(data_str)
+                                        # Extract content from choices
+                                        if 'choices' in data and len(data['choices']) > 0:
+                                            choice = data['choices'][0]
+                                            if 'delta' in choice and 'content' in choice['delta']:
+                                                content = choice['delta']['content']
+                                                if content:
+                                                    yield content
+                                    except json.JSONDecodeError:
+                                        # Skip invalid JSON
+                                        continue
                     else:
-                        return {
-                            "content": message.get("content", ""),
-                            "tool_calls": []
-                        }
+                        # Handle non-streaming response
+                        result = await response.json()
+                        logger.debug(f"Received response: {result}")
+
+                        # Extract the content and tool calls
+                        choice = result["choices"][0]
+                        message = choice["message"]
+                        
+                        # Handle tool calls if present
+                        if "tool_calls" in message and message["tool_calls"]:
+                            return_message = {
+                                "content": message.get("content", ""),
+                                "tool_calls": message["tool_calls"]
+                            }
+                        else:
+                            return_message = {
+                                "content": message.get("content", ""),
+                                "tool_calls": []
+                            }
+                        # Yield the result for non-streaming mode
+                        yield return_message
                         
             except aiohttp.ClientError as e:
                 logger.error(f"Network error during API request: {e}")
@@ -173,23 +214,87 @@ class IOIntelligenceModel(llm.Model):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
-        result = loop.run_until_complete(self.execute_async_with_tools(prompt))
-        content = result["content"]
-        
-        # Handle tool calls if present
-        if result["tool_calls"]:
-            for tool_call in result["tool_calls"]:
-                response.add_tool_call(
-                    llm.ToolCall(
-                        name=tool_call["function"]["name"],
-                        arguments=tool_call["function"]["arguments"],
+        if stream:
+            # Handle streaming - yield chunks in real-time
+            def sync_stream():
+                # Create queues to handle async-to-sync streaming
+                chunk_queue = queue.Queue()
+                exception_queue = queue.Queue()
+                done_queue = queue.Queue()
+                
+                # Producer function that runs in a separate thread
+                def producer():
+                    async def async_producer():
+                        try:
+                            async for chunk in self.execute_async_with_tools(prompt, stream=True):
+                                chunk_queue.put(chunk)
+                        except Exception as e:
+                            exception_queue.put(e)
+                        finally:
+                            done_queue.put(True)
+                    
+                    # Run the async producer
+                    loop.run_until_complete(async_producer())
+                
+                # Start the producer in a separate thread
+                producer_thread = threading.Thread(target=producer)
+                producer_thread.start()
+                
+                # Consumer - yield chunks as they arrive
+                while True:
+                    try:
+                        # Check for exceptions first
+                        try:
+                            exc = exception_queue.get_nowait()
+                            raise exc
+                        except queue.Empty:
+                            pass
+                        
+                        # Try to get a chunk with timeout
+                        try:
+                            chunk = chunk_queue.get(timeout=0.1)
+                            yield chunk
+                        except queue.Empty:
+                            # Check if we're done
+                            try:
+                                done_queue.get_nowait()
+                                break
+                            except queue.Empty:
+                                # Still waiting, continue
+                                continue
+                                
+                    except Exception as e:
+                        # Make sure to join the thread before re-raising
+                        producer_thread.join()
+                        raise e
+                
+                # Wait for the producer thread to finish
+                producer_thread.join()
+                    
+            return sync_stream()
+        else:
+            # Handle non-streaming
+            result_generator = self.execute_async_with_tools(prompt, stream=False)
+            # Get the first (and only) item from the generator
+            result = loop.run_until_complete(result_generator.__anext__())
+            content = result["content"]
+            
+            # Handle tool calls if present
+            if result["tool_calls"]:
+                for tool_call in result["tool_calls"]:
+                    response.add_tool_call(
+                        llm.ToolCall(
+                            name=tool_call["function"]["name"],
+                            arguments=tool_call["function"]["arguments"],
+                        )
                     )
-                )
-        
-        # Return the content as an iterator
-        return iter([content])
+            
+            # Return the content as an iterator
+            return iter([content])
 
     async def execute_async(self, prompt, get_env_var=None):
         """Async execution without tools for compatibility"""
-        result = await self.execute_async_with_tools(prompt, get_env_var=get_env_var)
+        result_generator = self.execute_async_with_tools(prompt, get_env_var=get_env_var, stream=False)
+        # Get the first (and only) item from the generator
+        result = await result_generator.__anext__()
         return result["content"]
