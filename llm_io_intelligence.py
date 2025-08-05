@@ -17,25 +17,98 @@ import threading
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
+
+async def fetch_available_models(api_key: str) -> List[tuple]:
+    """Fetch available models from IO Intelligence API"""
+    api_base = "https://api.intelligence.io.solutions/api/v1"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(f"{api_base}/models", headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = []
+                    # Parse the response to extract model information
+                    # Assuming the API returns a list of models with id, name, and context_length
+                    model_list = data.get("data", [])
+                    for model_data in model_list:
+                        model_id = model_data.get("id")
+                        full_name = model_data.get("id")  # Use the ID as the full name since name/full_name fields don't exist
+                        context_length = 32000  # Default to 32K since context_length field doesn't exist
+                        if model_id and full_name:
+                            # Prepend "ionet/" to the model ID
+                            model_id = f"ionet/{model_id}"
+                            models.append((model_id, full_name, context_length))
+                    return models
+                else:
+                    logger.warning(f"Failed to fetch models: {response.status}")
+                    return []
+        except Exception as e:
+            logger.warning(f"Error fetching models from API: {e}")
+            return []
+
 @llm.hookimpl
 def register_models(register):
     logger.debug("Registering io intelligence models")
     
-    models = [
-        # Current models from API
-        ("llama-4-maverick-17b", "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", 430000),
-        ("deepseek-r1-0528", "deepseek-ai/DeepSeek-R1-0528", 128000),
-        ("intel-qwen3-coder-480b", "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar", 32000),
-        ("qwen3-235b", "Qwen/Qwen3-235B-A22B-FP8", 32000),
-        ("llama-3.2-90b-vision", "meta-llama/Llama-3.2-90B-Vision-Instruct", 16000),
-        ("qwen2.5-vl-32b", "Qwen/Qwen2.5-VL-32B-Instruct", 32000),
-        ("llama-3.3-70b", "meta-llama/Llama-3.3-70B-Instruct", 128000),
-        ("devstral-small-2505", "mistralai/Devstral-Small-2505", 32000),
-        ("magistral-small-2506", "mistralai/Magistral-Small-2506", 32000),
-        ("mistral-large-2411", "mistralai/Mistral-Large-Instruct-2411", 128000),
-        ("aya-expanse-32b", "CohereForAI/aya-expanse-32b", 8000),
-    ]
+    # Try to get API key from LLM key system
+    api_key = None
+    try:
+        if hasattr(llm, 'get_key'):
+            api_key = llm.get_key(None, "ionet", None)
+        # If no API key from LLM key system, try environment variable
+        if not api_key:
+            api_key = os.environ.get("IONET")
+    except Exception as e:
+        logger.warning(f"Error getting API key: {e}")
+        # Fall back to environment variable
+        api_key = os.environ.get("IONET")
     
+    # Try to fetch models from API if API key is available
+    models = []
+    if api_key:
+        logger.debug("Attempting to fetch models from API")
+        try:
+            # Run the async function in a new event loop
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+            models = loop.run_until_complete(fetch_available_models(api_key))
+            logger.debug(f"Successfully fetched {len(models)} models from API")
+        except Exception as e:
+            logger.warning(f"Failed to fetch models from API: {e}")
+            # If API fetch fails, don't fall back to hardcoded models when API key is present
+            # This ensures we only use API models when API key is set
+            models = []
+    else:
+        logger.debug("No API key present, will use hardcoded models")
+    
+    # Fallback to hardcoded models only if no API key is present
+    if not api_key and not models:
+        logger.debug("Using hardcoded model list")
+        models = [
+            # Current models from API
+            ("ionet/llama-4-maverick-17b", "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", 430000),
+            ("ionet/deepseek-r1-0528", "deepseek-ai/DeepSeek-R1-0528", 128000),
+            ("ionet/intel-qwen3-coder-480b", "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar", 32000),
+            ("ionet/qwen3-235b", "Qwen/Qwen3-235B-A22B-FP8", 32000),
+            ("ionet/llama-3.2-90b-vision", "meta-llama/Llama-3.2-90B-Vision-Instruct", 16000),
+            ("ionet/qwen2.5-vl-32b", "Qwen/Qwen2.5-VL-32B-Instruct", 32000),
+            ("ionet/llama-3.3-70b", "meta-llama/Llama-3.3-70B-Instruct", 128000),
+            ("ionet/devstral-small-2505", "mistralai/Devstral-Small-2505", 32000),
+            ("ionet/magistral-small-2506", "mistralai/Magistral-Small-2506", 32000),
+            ("ionet/mistral-large-2411", "mistralai/Mistral-Large-Instruct-2411", 128000),
+            ("ionet/aya-expanse-32b", "CohereForAI/aya-expanse-32b", 8000),
+        ]
+    
+    logger.debug(f"Registering {len(models)} models")
     for model_id, full_name, context_length in models:
         logger.debug(f"Registering model: {model_id} ({full_name})")
         model = IOIntelligenceModel(model_id, full_name, context_length)
@@ -71,9 +144,25 @@ class IOIntelligenceModel(llm.Model):
 
     async def execute_async_with_tools(self, prompt, tools=None, get_env_var=None, stream=False):
         """Execute the model asynchronously with tool support"""
-        api_key = get_env_var("IOINTELLIGENCE_API_KEY") if get_env_var else os.environ.get("IOINTELLIGENCE_API_KEY")
+        # Try to get API key
+        api_key = None
+        if get_env_var:
+            api_key = get_env_var("ionet")
+        else:
+            # Try to get API key from LLM key system
+            try:
+                if hasattr(llm, 'get_key'):
+                    api_key = llm.get_key(None, "ionet", None)
+                # If no API key from LLM key system, try environment variable
+                if not api_key:
+                    api_key = os.environ.get("IONET")
+            except Exception as e:
+                logger.warning(f"Error getting API key: {e}")
+                # Fall back to environment variable
+                api_key = os.environ.get("IONET")
+        
         if not api_key:
-            raise ValueError("IOINTELLIGENCE_API_KEY environment variable is required")
+            raise ValueError("IONET key is required. Set it with 'llm keys set ionet' or IONET environment variable.")
 
         # Build messages
         messages = self.build_messages(prompt, prompt.conversation if hasattr(prompt, 'conversation') else None)

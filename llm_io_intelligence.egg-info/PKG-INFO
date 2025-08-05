@@ -42,14 +42,14 @@ llm install llm-io-intelligence
 Set your IO Intelligence API key:
 
 ```bash
-llm keys set iointelligence
+llm keys set ionet
 # Paste your API key when prompted
 ```
 
 Or set it as an environment variable:
 
 ```bash
-export IOINTELLIGENCE_API_KEY="your-api-key-here"
+export IONET="your-api-key-here"
 ```
 
 ## Tool Calling Support

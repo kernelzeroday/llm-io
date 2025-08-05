@@ -23,12 +23,12 @@ def run_command(cmd, description):
 
 def check_api_key():
     """Check if API key is set"""
-    api_key = os.environ.get('IOINTELLIGENCE_API_KEY')
+    api_key = os.environ.get('IONET')
     if not api_key:
-        print("\n❌ IOINTELLIGENCE_API_KEY not set")
+        print("\n❌ IONET not set")
         print("Please set your API key:")
-        print("  export IOINTELLIGENCE_API_KEY='your-api-key-here'")
-        print("Or use: llm keys set iointelligence")
+        print("  export IONET='your-api-key-here'")
+        print("Or use: llm keys set ionet")
         return False
     else:
         print(f"✅ API key found: {api_key[:20]}...")

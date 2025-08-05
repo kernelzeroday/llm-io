@@ -13,10 +13,10 @@ def test_tool_execution():
     print("=== TESTING TOOL EXECUTION ===")
     
     # Check if API key is set
-    api_key = os.environ.get('IOINTELLIGENCE_API_KEY')
+    api_key = os.environ.get('IONET')
     if not api_key:
-        print("ERROR: IOINTELLIGENCE_API_KEY environment variable not set")
-        print("Please set your API key: export IOINTELLIGENCE_API_KEY='your-key-here'")
+        print("ERROR: IONET environment variable not set")
+        print("Please set your API key: export IONET='your-key-here'")
         return
     
     # Test with a tool-compatible model
